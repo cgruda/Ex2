@@ -37,7 +37,7 @@
  * DEFINES
  ******************************************************************************
  */
-#define ARGC    3
+#define ARGC    4
 #define OUTPUT_FILE_NAME    "decrypted.txt"
 
 /*
@@ -82,7 +82,15 @@ struct enviroment
 {
     FILE *infptr;
     FILE *outfptr;
+    HANDLE *handle_arr;
     int key;
+    int thread_cnt;
+};
+
+struct section
+{
+    int start;
+    int length;
 };
 
 /*
@@ -93,6 +101,9 @@ struct enviroment
 int decrypt_file(FILE *enc_fptr, FILE *dec_fptr, int key);
 char decrypt_symbol(char symbol, int key);
 void init(struct enviroment *env, int argc, char **argv);
+int decrypt_section(FILE *fptr, FILE *out, int key, int start, int length);
+int count_lines_in_file(char *path);
+struct section *file_2_section_arr(char *path, int num_of_sections);
 
 
 #endif // __CEASAR_H__
