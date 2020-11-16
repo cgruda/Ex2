@@ -24,8 +24,13 @@ int main(int argc, char **argv)
     struct enviroment env = {0};
     struct section *s;
     init(&env, argc, argv);
+    
     s = file_2_section_arr(argv[1], env.thread_cnt);
-    printf("\n");
+    if (!s) {
+        printf("files2sections error\n");
+        exit(1);
+    }
+
     for (int i = 0; i < env.thread_cnt; ++i) {
         printf("start=%d; length=%d\n",s[i].start,s[i].length);
     }

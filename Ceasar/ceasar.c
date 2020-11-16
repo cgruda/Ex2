@@ -64,7 +64,7 @@ void init(struct enviroment *env, int argc, char **argv)
     //ASSERT_ERR("fopen()", env->infptr);
     //ASSERT_ERR("fopen()", env->outfptr);
 
-    env->key = strtol(argv[2], NULL, 10);
+    env->key        = strtol(argv[2], NULL, 10);
     env->thread_cnt = strtol(argv[3], NULL, 10);
     // TODO: error handling
 
@@ -119,41 +119,63 @@ int decrypt_file(FILE *enc_fptr, FILE *dec_fptr, int key)
     return 0;
 }
 
-
-int decrypt_section(FILE *fptr, FILE *out, int key, int start, int length)
+/**
+ ******************************************************************************
+ * @brief decrypt an file section
+ * @param infp   encrypted (input) file pointer
+ * @param outfp  decrypted (output) file pointer
+ * @param key    decryption key
+ * @param start  position in file from where to start decryption
+ * @param length section len - how many chars to decrypt
+ * @return 0 on sucess, -1 on failure
+ ******************************************************************************
+ */
+int decrypt_section(FILE *infp, FILE *outfp, int key, int start, int length)
 {
     char symbol;
 
-    // TODO: check vals
-    if (!fptr || !out)
+    // sanity
+    if (!infp || !outfp)
         return -1;
 
-    fseek(fptr, start, SEEK_SET);
-    fseek(out, start, SEEK_SET);
+    // sanity
+    if (start < 0 || length < 0)
+        return -1;
+
+    // seek positions
+    if(!!fseek(infp,  start, SEEK_SET) ||
+       !!fseek(outfp, start, SEEK_SET))
+       return -1;
 
     while (length--) {
-        symbol = fgetc(fptr);
+        symbol = fgetc(infp);
         symbol = decrypt_symbol(symbol, key);
         if (symbol != EOF)
-            fputc(symbol, out);
+            fputc(symbol, outfp);
     }
 
     return 0;
 }
 
-// FIXME: do we count blank lines?
+/**
+ ******************************************************************************
+ * @brief decrypt an file section
+ * @param path path to file
+ * @return number of lines in file
+ ******************************************************************************
+ */
 int count_lines_in_file(char *path)
 {
+    FILE *fptr = NULL;
     int lines = 0;
     char c;
-    FILE *fptr = NULL;
 
     fptr = fopen(path, "r");
     ASSERT_ERR("fopen()", fptr);
 
     while(!feof(fptr)) {
         c = fgetc(fptr);
-        if (c == '\n' || c == EOF) // TODO: do we need to check EOF?
+        if (c == '\n' || c == EOF)
             lines++;
     }
 
@@ -162,58 +184,68 @@ int count_lines_in_file(char *path)
     return lines;
 }
 
-// TODO: make prety
+
+/**
+ ******************************************************************************
+ * @brief calculate file sections start and length
+ * @param path path to file
+ * @param num_of_sections
+ * @return pointer to sections array
+ ******************************************************************************
+ */
 struct section *file_2_section_arr(char *path, int num_of_sections)
 {
-    FILE   *fptr = NULL;
+    FILE   *fp = NULL;
     struct section *section_arr = NULL;
     int    lines_in_file, lines_in_section, lines_remained;
     int    line_cnt, char_cnt = 0, i = 0;
     char   c;
 
+    // sanity
+    if (num_of_sections < 1)
+        return NULL;
+
     lines_in_file    = count_lines_in_file(path);
     lines_in_section = lines_in_file / num_of_sections;
     lines_remained   = lines_in_file % num_of_sections;
 
+    // sanity
     if (num_of_sections > lines_in_file) {
         printf("to many sections!!\n");
-        //TODO: error
+        return NULL;
     }
 
-    fptr = fopen(path, "r");
-    ASSERT_ERR("fopen()", fptr);
-    
+    fp = fopen(path, "r");
+    ASSERT_ERR("fopen()", fp);
+
     section_arr = calloc(num_of_sections, sizeof(struct section));
     ASSERT_ERR("calloc()", section_arr);
 
-    while (!feof(fptr)) {
+    // TODO: can make prety
+    while (!feof(fp)) {
         line_cnt = 0;
         section_arr[i].start = char_cnt;
-
-        // count chars in section
-        while(line_cnt < lines_in_section) {
-            c = fgetc(fptr);
+        while (line_cnt < lines_in_section) {
+            c = fgetc(fp);
             char_cnt++;
             if (c == '\n' || c == EOF)
                 line_cnt++;
         }
-
-        // add extra line if any remained
         if (lines_remained != 0) {
-            while(1) {
-                c = fgetc(fptr);
+            while (1) {
+                c = fgetc(fp);
                 char_cnt++;
                 if (c == '\n')
                     break;
             }
             lines_remained--;
         }
-        
         section_arr[i].length = char_cnt - section_arr[i].start;
         char_cnt += 1;
         i++;
     }
  
-    fclose(fptr);
+    fclose(fp);
+
     return section_arr;
 }
