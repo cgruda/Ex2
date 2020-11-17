@@ -45,31 +45,50 @@ int mod(int a, int b)
 
 /**
  ******************************************************************************
- * @brief check input, open files
+ * @brief check valid input
  * @param env pointer to enviroment struct to hold global vars
  * @param argc from main
  * @param argv from main
+ * @return ERR on failure, !ERR on success
  ******************************************************************************
  */
-void init(struct enviroment *env, int argc, char **argv)
+int init(struct enviroment *env, int argc, char **argv)
 {
     if (argc != ARGC)
     {
-        printf("\nusage:\n\tceasar.exe [file-to-decrypt] [key]\n");
-        return -1;
+        printf("\nusage:\n\tceasar.exe [path] [key] [n] -[command]\n\n"
+                        "\t[path]    - path of file to dec/encrypt\n"
+                        "\t[key]     - dec/encryption key         \n"
+                        "\t[n]       - number of threads          \n"
+                        "\t[command] - e: encrypt, d: decrypt     \n\n");
+        return ERR;
     }
 
-    //env->infptr  = fopen(argv[1], "r");
-    //env->outfptr = fopen(OUTPUT_FILE_NAME, "w");
-    //ASSERT_ERR("fopen()", env->infptr);
-    //ASSERT_ERR("fopen()", env->outfptr);
+    if(!PathFileExistsA(argv[1])) {
+        printf("%s not found (WinAPI Error 0x%X)", argv[1], GetLastError());
+        return ERR;
+    }
 
-    env->key        = strtol(argv[2], NULL, 10);
-    env->thread_cnt = strtol(argv[3], NULL, 10);
-    // TODO: error handling
+    env->key = strtol(argv[2], NULL, 10);
+    if (errno == ERANGE) { // FIXME: not enough
+        printf("invalid number of threads value [n], must be int > 0.\n");
+        return ERR;
+    }
 
-    // env->handle_arr = calloc(env->thread_cnt, sizeof(HANDLE));
-    // ASSERT_ERR("calloc()", env->handle_arr);
+    env->n_thread = strtol(argv[3], NULL, 10);
+    if ((env->n_thread < 1) || (errno == ERANGE)) {
+        printf("invalid number of threads, [n] must be integer > 0.\n");
+        return ERR;
+    }
+    
+    if (strcmp(argv[4],"-d") != 0 && strcmp(argv[4],"-e")) {
+        printf("'%s' is not a valid command. try '-d' or '-e'.\n", argv[4]);
+        return ERR;
+    } else {
+        env->command = argv[4][1];
+    }
+
+    return (!ERR);
 }
 
 /**
@@ -92,6 +111,9 @@ char decrypt_symbol(char symbol, int key)
         return symbol;
 }
 
+/* encrypt is logically equivalent to decrypt */
+#define encrypt_symbol decrypt_symbol
+
 /**
  ******************************************************************************
  * @brief decrypt an encrypted file
@@ -106,7 +128,7 @@ int decrypt_file(FILE *enc_fptr, FILE *dec_fptr, int key)
     char enc_symbol, dec_symbol;
 
     if (!enc_fptr || !dec_fptr)
-        return -1;
+        return ERR;
 
     while(!feof(enc_fptr))
     {
@@ -116,7 +138,7 @@ int decrypt_file(FILE *enc_fptr, FILE *dec_fptr, int key)
             fputc(dec_symbol, dec_fptr);
     }
 
-    return 0;
+    return !ERR;
 }
 
 /**
@@ -136,16 +158,16 @@ int decrypt_section(FILE *infp, FILE *outfp, int key, int start, int length)
 
     // sanity
     if (!infp || !outfp)
-        return -1;
+        return ERR;
 
     // sanity
     if (start < 0 || length < 0)
-        return -1;
+        return ERR;
 
     // seek positions
     if(!!fseek(infp,  start, SEEK_SET) ||
        !!fseek(outfp, start, SEEK_SET))
-       return -1;
+       return ERR;
 
     while (length--) {
         symbol = fgetc(infp);
@@ -154,8 +176,11 @@ int decrypt_section(FILE *infp, FILE *outfp, int key, int start, int length)
             fputc(symbol, outfp);
     }
 
-    return 0;
+    return !ERR;
 }
+
+/* encrypt is logically equivalent to decrypt */
+#define encrypt_section decrypt_section
 
 /**
  ******************************************************************************
@@ -167,6 +192,7 @@ int decrypt_section(FILE *infp, FILE *outfp, int key, int start, int length)
 int count_lines_in_file(char *path)
 {
     FILE *fptr = NULL;
+    int res;
     int lines = 0;
     char c;
 
@@ -179,7 +205,8 @@ int count_lines_in_file(char *path)
             lines++;
     }
 
-    fclose(fptr);
+    res = fclose(fptr);
+    ASSERT_ERR("fclose()", (res == 0));
 
     return lines;
 }
@@ -199,6 +226,7 @@ struct section *file_2_section_arr(char *path, int num_of_sections)
     struct section *section_arr = NULL;
     int    lines_in_file, lines_in_section, lines_remained;
     int    line_cnt, char_cnt = 0, i = 0;
+    int    res;
     char   c;
 
     // sanity
@@ -211,7 +239,6 @@ struct section *file_2_section_arr(char *path, int num_of_sections)
 
     // sanity
     if (num_of_sections > lines_in_file) {
-        printf("to many sections!!\n");
         return NULL;
     }
 
@@ -245,7 +272,8 @@ struct section *file_2_section_arr(char *path, int num_of_sections)
         i++;
     }
  
-    fclose(fp);
+    res = fclose(fp);
+    ASSERT_ERR("fclose()", (res == 0));
 
     return section_arr;
 }

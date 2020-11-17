@@ -12,6 +12,8 @@
 #ifndef __CEASAR_H__
 #define __CEASAR_H__
 
+#pragma comment(lib, "Shlwapi.lib")
+
 
 /*
  ******************************************************************************
@@ -26,6 +28,7 @@
  ******************************************************************************
  */
 #include <windows.h>
+#include "Shlwapi.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -37,8 +40,12 @@
  * DEFINES
  ******************************************************************************
  */
-#define ARGC    4
+#define ARGC    5 // exe, path, key, threads, e/d
 #define OUTPUT_FILE_NAME    "decrypted.txt"
+#define ERR 1
+
+#define DEC 'd'
+#define ENC 'e'
 
 /*
  ******************************************************************************
@@ -80,11 +87,10 @@
 
 struct enviroment
 {
-    FILE *infptr;
-    FILE *outfptr;
-    HANDLE *handle_arr;
-    int key;
-    int thread_cnt;
+    char *path;
+    int   key;
+    int   n_thread;
+    char  command;
 };
 
 struct section
@@ -100,7 +106,7 @@ struct section
  */
 int decrypt_file(FILE *enc_fptr, FILE *dec_fptr, int key);
 char decrypt_symbol(char symbol, int key);
-void init(struct enviroment *env, int argc, char **argv);
+int init(struct enviroment* env, int argc, char** argv);
 int decrypt_section(FILE *fptr, FILE *out, int key, int start, int length);
 int count_lines_in_file(char *path);
 struct section *file_2_section_arr(char *path, int num_of_sections);
