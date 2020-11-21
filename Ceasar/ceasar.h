@@ -42,7 +42,17 @@
  */
 #define ARGC    5 // exe, path, key, threads, e/d
 #define OUTPUT_FILE_NAME    "decrypted.txt"
-#define ERR 1
+
+enum result
+{
+    RES_OK,
+    RES_ERR,
+    RES_WINAPI_ERR,
+    RES_STDLIB_ERR,
+};
+
+#define ERR ((int)(1))
+#define OK  ((int)(0))
 
 #define DEC 'd'
 #define ENC 'e'
@@ -72,6 +82,24 @@
     }                                                                           \
 } while (0)
 
+// #define PRINT_ERR(err_code) do {                                                \
+//         switch (err_code) {                                                     \
+//         case RES_STDLIB_ERR:                                                    \
+//             printf("%s failed: %s\n", func, strerror(errno));                   \
+//             break;                                                              \
+//         case RES_WINAPI_ERR:                                                    \
+//             printf("WinAPI error: %s\n", func, strerror(errno));                   \
+//             break;                                                              \
+//         else if (GetLastError())                                                \
+//             printf("%s failed: WinError 0x%X\n", func, GetLastError());         \
+//         else                                                                    \
+//             printf("%s failed: unknown error\n", func);                         \
+        
+//     }                                                                           \
+// } while (0)
+
+
+
 /*
  ******************************************************************************
  * ENUMERATIONS
@@ -99,15 +127,25 @@ struct section
     int length;
 };
 
+struct thread_args
+{
+    char *inpath;
+    char *outpath;
+    int key;
+    int start;
+    int length;
+};
+
 /*
  ******************************************************************************
  * DECLARATIONS
  ******************************************************************************
  */
-int decrypt_file(FILE *enc_fptr, FILE *dec_fptr, int key);
+int decrypt_file(char *path, int key, int n_threads,
+                                      struct section *section_arr);
 char decrypt_symbol(char symbol, int key);
 int init(struct enviroment* env, int argc, char** argv);
-int decrypt_section(FILE *fptr, FILE *out, int key, int start, int length);
+DWORD WINAPI decrypt_thread(struct thread_args *args);
 int count_lines_in_file(char *path);
 struct section *file_2_section_arr(char *path, int num_of_sections);
 
