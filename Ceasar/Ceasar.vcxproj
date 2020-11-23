@@ -139,11 +139,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="ceasar.c" />
+    <ClCompile Include="encode_decode.c" />
     <ClCompile Include="main.c" />
+    <ClCompile Include="tasks.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ceasar.h" />
+    <ClInclude Include="encode_decode.h" />
+    <ClInclude Include="tasks.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
