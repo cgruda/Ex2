@@ -50,9 +50,8 @@
 // return codes are negative
 enum return_code
 {
-    RC_OK,
-    RC_ERR,
-    RC_WINAPI_ERR,
+    ERR,
+    OK,
 };
 
 /*
@@ -74,11 +73,14 @@ struct arguments
  ******************************************************************************
  */
 void print_usage();
-void print_error(int error_code);
+void print_error();
 int mod(int a, int b);
 int init(struct arguments *args, int argc, char **argv);
-int create_overwrite_output_file(char *path);
 int count_lines_in_file(char *path, int *lines);
-int split_file_into_sections(char *path, int num_of_sections, struct section *section_arr);
+int file_2_sections(char *path, int num_of_sections, struct section *p_sections);
+int wait_for_n_threads(HANDLE *p_h_threads, int n_threads);
+int overwrite_file(char *path);
+int create_n_threads(LPTHREAD_START_ROUTINE thread_func, HANDLE *p_h_threads,
+                     int n_threads, struct thread_args *p_args);
 
 #endif // __TASKS_H__

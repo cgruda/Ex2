@@ -44,22 +44,14 @@ void print_usage()
  * @param error_code
  ******************************************************************************
  */
-void print_error(int error_code)
+void print_error()
 {
-    switch (error_code) {
-    case RC_ERR:
-        if (errno)
-            printf("%s\n", strerror(errno));
-        break;
-    case RC_WINAPI_ERR:
-        if (GetLastError())
-            printf("WinAPI error: 0x%X\n", GetLastError());
-        else
-            printf("error: unknown error\n");
-        break;
-    default:
-        break;
-    }
+    if (errno)
+        printf("%s\n", strerror(errno));
+    else if (GetLastError())
+        printf("WinAPI error: 0x%X\n", GetLastError());
+    else
+        printf("unknown error\n");
 }
 
 /**
@@ -86,42 +78,50 @@ int mod(int a, int b)
  ******************************************************************************
  */
 int init(struct arguments *args, int argc, char **argv)
-{    
+{
     // number of arguments
     if (argc != ARGC) {
         print_usage();
-        return RC_ERR;
+        return ERR;
     }
+
+    memset(args, 0, sizeof(*args));
 
     // input file path check
     args->path = argv[1];
-    if(PathFileExistsA(args->path) == FALSE) {
+    if(PathFileExistsA(args->path) == FALSE)
+    {
         printf("\n%s not found (WinAPI Error 0x%X)\n\n", args->path, GetLastError());
-        return RC_ERR;
+        return ERR;
     }
 
     // key
     args->key = strtol(argv[2], NULL, 10);
-    if (errno == ERANGE) { // FIXME: not enough
+    if (errno == ERANGE)
+    { // FIXME: not enough
         printf("\ninvalid input. [key] must be integer.\n");
         print_usage();
-        return RC_ERR;
+        return ERR;
     }
 
     // number of threads
     args->n_thread = strtol(argv[3], NULL, 10);
-    if ((args->n_thread < 1) || (errno == ERANGE)) {
+    if ((args->n_thread < 1) || (errno == ERANGE))
+    {
         printf("\ninvalid inupt, [n] must be integer > 0.\n");
         print_usage();
-        return RC_ERR;
+        return ERR;
     }
 
     // encode / decode
-    if (strcmp(argv[4],"-d") && strcmp(argv[4],"-e")) {
+    if (strcmp(argv[4],"-d") && strcmp(argv[4],"-e"))
+    {
         printf("\ninvalid input, [command] can be 'd' or 'e'.\n");
         print_usage();
-        return RC_ERR;
-    } else {
+        return ERR;
+    }
+    else
+    {
         args->command = argv[4][1];
     }
 
@@ -129,7 +129,7 @@ int init(struct arguments *args, int argc, char **argv)
     if (args->command == ENC)
         args->key = -args->key;
 
-    return (RC_OK);
+    return (OK);
 }
 
 
@@ -137,10 +137,10 @@ int init(struct arguments *args, int argc, char **argv)
  ******************************************************************************
  * @brief create new file ovrwriting if existing
  * @param path path to file to create
- * @return RC_OK on success, RC_WINAPI_ERR on error
+ * @return OK on success, ERR on error
  ******************************************************************************
  */
-int create_overwrite_output_file(char *path)
+int overwrite_file(char *path)
 {
     HANDLE *h_outfile = NULL;
 
@@ -153,12 +153,18 @@ int create_overwrite_output_file(char *path)
                             NULL);
 
     if (h_outfile == INVALID_HANDLE_VALUE)
-        return RC_WINAPI_ERR;
+    {
+        printf("WinAPI error: 0x%X\n", GetLastError());
+        return ERR;
+    }
 
-    if (CloseHandle(h_outfile) == 0)
-        return RC_WINAPI_ERR;
+    if (!CloseHandle(h_outfile))
+    {
+        printf("WinAPI error: 0x%X\n", GetLastError());
+        return ERR;
+    }
 
-    return RC_OK;
+    return OK;
 }
 
 /**
@@ -173,22 +179,22 @@ int count_lines_in_file(char *path, int *lines)
     FILE *fp = NULL;
     char c;
 
-    fp = fopen(path, "r");
-    if (fp == NULL)
-        return RC_ERR;
+    if (!(fp = fopen(path, "r")))
+        return ERR;
 
     *lines = 0;
 
-    while(!feof(fp)) {
+    while(!feof(fp))
+    {
         c = fgetc(fp);
         if (c == '\n' || c == EOF)
             (*lines)++;
     }
 
     if (fclose(fp) != 0)
-        return RC_ERR;
+        return ERR;
 
-    return RC_OK;
+    return OK;
 }
 
 /**
@@ -196,72 +202,168 @@ int count_lines_in_file(char *path, int *lines)
  * @brief calculate file sections start and length
  * @param path path to file
  * @param num_of_sections
- * @param section_arr pointer to sections array
+ * @param p_sections pointer to sections array
  ******************************************************************************
  */
-int split_file_into_sections(char *path, int num_of_sections, struct section *section_arr)
+int file_2_sections(char *path, int num_of_sections, struct section *p_sections)
 {
     FILE   *fp = NULL;
     int    lines_in_file, lines_in_section, lines_remained;
     int    line_cnt, char_cnt = 0, i = 0;
-    int    rc = RC_OK;
     char   c;
 
     // calc lines in sections
-    rc = count_lines_in_file(path, &lines_in_file);
-    if(rc != RC_OK) {
+    if(!count_lines_in_file(path, &lines_in_file))
+    {
         printf("error: failed counting lines in %s.\n", path);
-        return rc;
+        return ERR;
     }
 
     lines_in_section = lines_in_file / num_of_sections;
     lines_remained   = lines_in_file % num_of_sections;
 
     // sanity
-    if (num_of_sections > lines_in_file) {
-        printf("error: can't split %d lines into %d sections\n", lines_in_file,
-                                                                 num_of_sections);
-        return RC_ERR;
+    if (num_of_sections > lines_in_file)
+    {
+        printf("error: can't split %d lines into %d sections\n", lines_in_file, num_of_sections);
+        return ERR;
     }
 
     // open input file
-    fp = fopen(path, "r");
-    if (fp == NULL)
-        return RC_ERR;
+    if(!(fp = fopen(path, "r")))
+        return ERR;
 
     // calculate sections
-    while (!feof(fp)) {
+    while (!feof(fp))
+    {
         line_cnt = 0;
-        section_arr[i].start = char_cnt;
-        while (line_cnt < lines_in_section) {
+        p_sections[i].start = char_cnt;
+        while (line_cnt < lines_in_section)
+        {
             c = fgetc(fp);
             char_cnt++;
-            if (c == '\n') {
+            if (c == '\n')
+            {
                 line_cnt++;
                 char_cnt++;
-            } else if (c == EOF) { 
+            }
+            else if (c == EOF)
+            { 
                 line_cnt++;
                 char_cnt--;
             }
         }
-        if (lines_remained != 0) {
-            while (1) {
+        if (lines_remained != 0)
+        {
+            while (1)
+            {
                 c = fgetc(fp);
                 char_cnt++;
-                if (c == '\n') {
+                if (c == '\n')
+                {
                     char_cnt++;
                     break;
                 }
             }
             lines_remained--;
         }
-        section_arr[i].length = char_cnt - section_arr[i].start;
+        p_sections[i].length = char_cnt - p_sections[i].start;
         i++;
     }
 
     // close input file
     if (fclose(fp) != 0)
-        rc = RC_ERR;
+        return ERR;
 
+    return OK;
+}
+
+
+/**
+ ******************************************************************************
+ * @brief thread for decrypting file
+ * @param args thread arguments
+ * @return 
+ ******************************************************************************
+ */
+int create_n_threads(LPTHREAD_START_ROUTINE thread_func, HANDLE *p_h_threads,
+                     int n_threads, struct thread_args *p_args)
+{
+    int rc = OK;
+
+    for (int i = 0; i < n_threads; ++i)
+    {
+        p_h_threads[i] = CreateThread(NULL,
+                                      0,
+                                      thread_func,
+                                      &p_args[i],
+                                      0,
+                                      NULL);
+        if (!p_h_threads[i])
+        {
+            printf("WinAPI error: 0x%X\n", GetLastError());
+            rc = ERR;
+            break;
+        }
+    }
+
+    return rc;
+}
+
+
+int wait_for_n_threads(HANDLE *p_h_threads, int n_threads)
+{
+    DWORD wait_code;
+    DWORD exit_code = OK;
+    bool all_wait_ok = true;
+    bool all_exit_ok = true;
+
+    int rc = OK;
+
+    // wait for threads to end
+    wait_code = WaitForMultipleObjects(n_threads, p_h_threads, TRUE, MAX_WAIT_END_TIME_MS);
+    if (wait_code != WAIT_OBJECT_0)
+    {
+        if (wait_code == WAIT_FAILED)
+            printf("WinAPI error: 0x%X\n", GetLastError());
+
+        for (int i = 0; i < n_threads; ++i)
+        {
+            wait_code = WaitForSingleObject(p_h_threads[i], 0);
+            if(wait_code != WAIT_OBJECT_0)
+            {
+                if (!TerminateThread(p_h_threads[i], ERR))
+                {
+                    printf("WinAPI error: 0x%X\n", GetLastError());
+                    return ERR;
+                }
+                wait_code = WaitForSingleObject(p_h_threads[i], 10);
+                if(wait_code != WAIT_OBJECT_0)
+                {
+                    if (wait_code == WAIT_FAILED)
+                        printf("WinAPI error: 0x%X\n", GetLastError());
+
+                    return ERR;
+                }
+            }
+        }
+
+        rc = ERR;
+    }
+
+    // all threads ended so get exit codes
+    for (int i = 0; i < n_threads; ++i)
+    {
+        if(!GetExitCodeThread(p_h_threads[i], &exit_code))
+        {
+            printf("WinAPI error: 0x%X\n", GetLastError());
+            rc = ERR;
+        }
+        if (exit_code == ERR)
+        {
+            rc = ERR;
+        }
+    }
+    
     return rc;
 }

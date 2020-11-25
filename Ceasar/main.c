@@ -15,12 +15,6 @@
 #include "tasks.h"
 #include "encode_decode.h"
 
-char *out_file_path[] =
-{
-    [DEC] = "decrypted.txt",
-    [ENC] = "encrypted.txt",
-};
-
 /*
  ******************************************************************************
  * MAIN
@@ -28,19 +22,13 @@ char *out_file_path[] =
  */
 int main(int argc, char **argv)
 {
-    struct arguments args = {0};
+    struct arguments args;
     int rc;
 
-    if (init(&args, argc, argv) != RC_OK)
-        return RC_ERR;
+    if(!init(&args, argc, argv))
+        return ERR;
 
-    rc = enc_dec_file(args.path, 
-                      out_file_path[args.command],
-                      args.key,
-                      args.n_thread);
-
-    if (rc != RC_OK)
-        print_error(rc);
+    rc = encode_decode_file(args.path, args.command, args.key, args.n_thread);
 
     return 0;
 }

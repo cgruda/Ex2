@@ -20,6 +20,17 @@
 
 /*
  ******************************************************************************
+ * GLOBAL VARIABLES
+ ******************************************************************************
+ */
+char *out_file_path[] =
+{
+    [DEC] = "decrypted.txt",
+    [ENC] = "encrypted.txt",
+};
+
+/*
+ ******************************************************************************
  * FUNCTION DEFENITIONS
  ******************************************************************************
  */
@@ -32,7 +43,7 @@
  * @return decrypted symbol
  ******************************************************************************
  */
-char enc_dec_char(char c, int key)
+char encode_decode_char(char c, int key)
 {
     if (isdigit(c))
         return ('0' + mod(c - '0' - key, 10));
@@ -52,45 +63,52 @@ char enc_dec_char(char c, int key)
  * @param key
  ******************************************************************************
  */
-void enc_dec_buffer(char *buffer, int buffer_len, int key)
+void encode_decode_buffer(char *buffer, int buffer_len, int key)
 {
     for (int i = 0; i < buffer_len; ++i)
     {
-        buffer[i] = enc_dec_char(buffer[i], key);
+        buffer[i] = encode_decode_char(buffer[i], key);
     }
 }
 
 /**
  ******************************************************************************
  * @brief thread for decrypting file
- * @param inpath encrypted (input) file path
- * @param outfp  decrypted (output) file path
- * @param key    decryption key
- * @param start  offset from begining of file from where to start decryption
- * @param length how many chars to decrypt
- * @return (!ERR) on sucess, (ERR) on failure
+ * @param args pointer to thread arguments struct
+ * @return ERR or OK
  ******************************************************************************
  */
-DWORD WINAPI enc_dec_thread(struct thread_args *args)
+DWORD WINAPI encode_decode_thread(struct thread_args *args)
 {
     HANDLE h_infile  = NULL;
     HANDLE h_outfile = NULL;
     char *buffer     = NULL;
-    int rc           = RC_OK;
+    DWORD rc         = ERR;
+    DWORD wait_code;
+
+    // wait for start event from main thread
+    wait_code = WaitForSingleObject(*args->start_evt, MAX_WAIT_START_TIME_MS);
+    if (wait_code != WAIT_OBJECT_0)
+    {
+        if (wait_code == WAIT_FAILED)
+            printf("WinAPI error: 0x%X\n", GetLastError());
+        
+        ExitThread(ERR);
+    }
 
     int start  = args->section->start;
     int length = args->section->length;
 
-    // sanity
-    if (start < 0 || length < 0)
-        return RC_ERR;
-
-    // sanity
-    if (!args->inpath || !args->outpath)
-        return RC_ERR;
-
-    // do/while(0) used to make error cleanup easier
+    // do-while(0) used for easier error cleanup
     do {
+        // sanity
+        if (start < 0 || length < 0)
+            break;
+
+        // sanity
+        if (!args->inpath || !args->outpath)
+            break;
+
         // input file handle
         h_infile = CreateFileA(args->inpath,
                                GENERIC_READ,
@@ -99,10 +117,8 @@ DWORD WINAPI enc_dec_thread(struct thread_args *args)
                                OPEN_EXISTING,
                                FILE_ATTRIBUTE_NORMAL,
                                NULL);
-        if (h_infile == INVALID_HANDLE_VALUE) {
-            rc = RC_WINAPI_ERR;
+        if (h_infile == INVALID_HANDLE_VALUE)
             break;
-        }
 
         // output file handle
         h_outfile = CreateFileA(args->outpath,
@@ -112,169 +128,147 @@ DWORD WINAPI enc_dec_thread(struct thread_args *args)
                                 OPEN_ALWAYS,
                                 FILE_ATTRIBUTE_NORMAL,
                                 NULL);
-        if (h_outfile == INVALID_HANDLE_VALUE) {
-            rc = RC_WINAPI_ERR;
+        if (h_outfile == INVALID_HANDLE_VALUE)
             break;
-        }
 
         // seek positions
-        if (SetFilePointer(h_infile, start, NULL, FILE_BEGIN) == 
-                                                  INVALID_SET_FILE_POINTER) {
-            rc = RC_WINAPI_ERR;
+        if ((SetFilePointer(h_infile,  start, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER) ||
+            (SetFilePointer(h_outfile, start, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER))
             break;
-        }
-        if (SetFilePointer(h_outfile, start, NULL, FILE_BEGIN) == 
-                                                  INVALID_SET_FILE_POINTER) {
-            rc = RC_WINAPI_ERR;
-            break;
-        }
 
         // buffer alocation
-        if ((buffer = calloc(length, sizeof(char))) == NULL) {
-            rc = RC_ERR;
+        if (!(buffer = (char*)calloc(length, sizeof(char))))
             break;
-        }
 
-        // read from input file
-        if (ReadFile(h_infile, buffer, length, NULL, NULL) == 0) {
-            rc = RC_WINAPI_ERR;
+        // read input file
+        if (!ReadFile(h_infile, buffer, length, NULL, NULL))
             break;
-        }
 
         // encode/decode buffer
-        enc_dec_buffer(buffer, length, args->key);
+        encode_decode_buffer(buffer, length, args->key);
 
-        // write buffer to output file
-        if (WriteFile(h_outfile, buffer, length, NULL, NULL) == 0) {
-            rc = RC_WINAPI_ERR;
+        // write output file
+        if (!WriteFile(h_outfile, buffer, length, NULL, NULL))
             break;
-        }
+
+        rc = OK;
 
     } while (0);
 
+    // pre-cleanup error prints
+    if (rc == ERR)
+        printf("WinAPI error: 0x%X\n", GetLastError());
+
     // free thread resources
     if (h_infile)
-        if (CloseHandle(h_infile) == 0)
-            return RC_WINAPI_ERR;
+        if (!CloseHandle(h_infile))
+            rc = ERR;
     if (h_outfile)
-        if (CloseHandle(h_outfile) == 0)
-            return RC_WINAPI_ERR;
+        if (!CloseHandle(h_outfile))
+            rc = ERR;
     if (buffer)
         free(buffer);
+
+    // post cleanup error prints
+    if (rc == ERR)
+        printf("WinAPI error: 0x%X\n", GetLastError());
 
     ExitThread((DWORD)rc);
 }
 
 /**
  ******************************************************************************
- * @brief thread for decrypting file
- * @param args thread arguments
- * @return 
- ******************************************************************************
- */
-int enc_dec_thread_call(struct thread_args *args)
-{
-    HANDLE h_thread;
-    DWORD exit_code;
-    int rc;
-
-    // use do/while(0) for easier error cleanup
-    do {
-        // cerate the thread
-        h_thread = CreateThread(NULL,
-                                0,
-                                enc_dec_thread,
-                                args,
-                                0,
-                                NULL);
-        if (h_thread == NULL)
-            return RC_WINAPI_ERR;
-
-        // end thread
-        rc = WaitForSingleObject(h_thread, MAX_WAIT_TIME_MS);
-        if (rc != WAIT_OBJECT_0) {
-            rc = TerminateThread(h_thread, RC_WINAPI_ERR);
-            if(rc == 0) {
-                rc = RC_WINAPI_ERR;
-                break;
-            }
-        }
-
-        // get thread exit code
-        if (GetExitCodeThread(h_thread, &exit_code) == 0) {
-            rc = RC_WINAPI_ERR;
-            break;
-        }
-
-        rc = (int)exit_code;
-
-    } while (0);
-
-    // close thread handle
-    if (CloseHandle(h_thread) == 0) {
-        return RC_WINAPI_ERR;
-    }
-
-    return rc;
-}
-
-/**
- ******************************************************************************
  * @brief decrypt an encrypted file
  * @param in_path path to input file
- * @param out_path path to output file
+ * @param command encode or decode
  * @param key for decryption
- * @param n_threads hoe many threads will be used
+ * @param n_threads how many threads will be used
  * @return return_code
  ******************************************************************************
  */
-int enc_dec_file(char *in_path, char *out_path, int key, int n_threads)
+int encode_decode_file(char *in_path, char command, int key, int n_threads)
 {
-    HANDLE *h_outfile = NULL;
-    struct section *section_arr = NULL;
-    struct thread_args args;
-    int rc = RC_OK, i = 0;
+    HANDLE *p_h_threads        = NULL;
+    HANDLE h_start_evt         = NULL;
+    struct section *p_sections = NULL;
+    struct thread_args *p_args = NULL;
+    char *out_path = out_file_path[command];
+    int rc = ERR;
 
-    // use do/wile(0) for easier error cleanup
+    // allocate and init mem for thread hanldles
+    if (!(p_h_threads = calloc(n_threads, sizeof(HANDLE))))
+        return ERR;
+    for (int i = 0; i < n_threads; p_h_threads[i++] = NULL);
+
+    // do/wile(0) for easier error cleanup
     do {
         // allocate mem for sections
-        section_arr = calloc(n_threads, sizeof(struct section));
-        if (section_arr == NULL) {
-            rc = RC_ERR;
+        if (!(p_sections = calloc(n_threads, sizeof(*p_sections))))
             break;
-        }
+
+        if (!(p_args = calloc(n_threads, sizeof(*p_args))))
+            break;
 
         // split file into n sctions
-        rc = split_file_into_sections(in_path, n_threads, section_arr);
-        if (rc != RC_OK) {
-            printf("error: failed to split file into %d.\n", n_threads);
+        if (!file_2_sections(in_path, n_threads, p_sections))
             break;
-        }
 
         // create output file
-        rc = create_overwrite_output_file(out_path);
-        if (rc != RC_OK) {
-            printf("error: failed to create output file.\n");
+        if (!overwrite_file(out_path))
             break;
+
+        // create event that will start threads
+        if (!(h_start_evt = CreateEventA(NULL, TRUE, FALSE, START_THREADS_EVT)))
+            break;
+
+        // prep aruments for threads
+        for (int i = 0; i < n_threads; ++i)
+        {
+            p_args[i].inpath    = in_path;
+            p_args[i].outpath   = out_path;
+            p_args[i].key       = key;
+            p_args[i].section   = &p_sections[i];
+            p_args[i].start_evt = &h_start_evt;
         }
 
-        args.inpath  = in_path;
-        args.outpath = out_path;
-        args.key     = key;
+        // create n threads
+        if (!create_n_threads(encode_decode_thread, p_h_threads, n_threads, p_args))
+            break;
 
-        // execute threads
-        for (int i = 0; i < n_threads; ++i) {
-            args.section = &section_arr[i];
-            rc = enc_dec_thread_call(&args);
-            if (rc != RC_OK) {
-                printf("error: thread %d failed.\n", i);
-                break;
-            }
-        }
+        // trigger threads start
+        if (!SetEvent(h_start_evt))
+            break;
+
+        // wait for threads to exit
+        if (!wait_for_n_threads(p_h_threads, n_threads))
+            break;
+
+        rc = OK;
+
     } while (0);
 
-    // free mem
-    free(section_arr);
+    // pre-clenup error print
+    if (rc == ERR)
+        printf("WinAPI error: 0x%X\n", GetLastError());
+
+    // cleanup
+    for (int i = 0; i < n_threads; ++i)
+        if (p_h_threads[i])
+            if(!CloseHandle(p_h_threads[i]))
+                rc = ERR;
+    if (h_start_evt)
+        if(!CloseHandle(h_start_evt))
+            rc = ERR;
+    if (p_h_threads)
+        free(p_h_threads);
+    if (p_sections)
+        free(p_sections);
+    if (p_args)
+        free(p_args);
+
+    // post-cleanup error prints
+    if (rc == ERR)
+        printf("WinAPI error: 0x%X\n", GetLastError());
 
     return rc;
 }

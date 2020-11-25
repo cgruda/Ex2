@@ -11,6 +11,7 @@
 
 #ifndef __ENCODE_DECODE_H__
 #define __ENCODE_DECODE_H__
+#define _CRT_SECURE_NO_WARNINGS
 
 /*
  ******************************************************************************
@@ -30,8 +31,9 @@
  * DEFINES
  ******************************************************************************
  */
-
-#define MAX_WAIT_TIME_MS 7000
+#define START_THREADS_EVT "start_threads_event"
+#define MAX_WAIT_END_TIME_MS   7000
+#define MAX_WAIT_START_TIME_MS 3000
 #define DEC 'd'
 #define ENC 'e'
 
@@ -52,6 +54,7 @@ struct thread_args
     char *outpath;
     int   key;
     struct section *section;
+    HANDLE *start_evt;
 };
 
 /*
@@ -59,10 +62,9 @@ struct thread_args
  * DECLARATIONS
  ******************************************************************************
  */
-char         enc_dec_char  (char c, int key);
-void         enc_dec_buffer(char *buffer, int buffer_len, int key);
-int          enc_dec_file  (char *in_path, char *out_path, int key, int n_threads);
-int          enc_dec_thread_call(struct thread_args *args);
-DWORD WINAPI enc_dec_thread(struct thread_args *args);
+char         encode_decode_char  (char c, int key);
+void         encode_decode_buffer(char *buffer, int buffer_len, int key);
+int          encode_decode_file  (char *in_path, char command, int key, int n_threads);
+DWORD WINAPI encode_decode_thread(struct thread_args *args);
 
 #endif // __ENCODE_DECODE_H__
