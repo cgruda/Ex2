@@ -30,5 +30,7 @@ int main(int argc, char **argv)
 
     rc = encode_decode_file(args.path, args.command, args.key, args.n_thread);
 
-    return 0;
+    // OK  on success
+    // ERR on any failure
+    return rc;
 }

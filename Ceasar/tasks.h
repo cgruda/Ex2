@@ -34,25 +34,11 @@
  ******************************************************************************
  */
 #define ARGC 5
+#define ERR  0
+#define OK   1
 
-/*
- ******************************************************************************
- * MACROS
- ******************************************************************************
- */
-
-/*
- ******************************************************************************
- * ENUMERATIONS
- ******************************************************************************
- */
-
-// return codes are negative
-enum return_code
-{
-    ERR,
-    OK,
-};
+#define DECODE_OUT_PATH "decrypted.txt"
+#define ENCODE_OUT_PATH "encrypted.txt"
 
 /*
  ******************************************************************************
@@ -72,15 +58,98 @@ struct arguments
  * DECLARATIONS
  ******************************************************************************
  */
+
+/**
+ ******************************************************************************
+ * @brief print usage
+ ******************************************************************************
+ */
 void print_usage();
-void print_error();
+
+/**
+ ******************************************************************************
+ * @brief modulu
+ * @param a
+ * @param b
+ * @return mod(a,b)
+ ******************************************************************************
+ */
 int mod(int a, int b);
+
+/**
+ ******************************************************************************
+ * @brief check input validity
+ * @param args pointer to arguments struct
+ * @param argc from main
+ * @param argv from main
+ * @return ERR on failure, !ERR on success
+ ******************************************************************************
+ */
 int init(struct arguments *args, int argc, char **argv);
+
+/**
+ ******************************************************************************
+ * @brief count number of lines in file
+ * @param path path to file
+ * @param lines num of lines counted
+ * @return number of lines in file
+ ******************************************************************************
+ */
 int count_lines_in_file(char *path, int *lines);
+
+/**
+ ******************************************************************************
+ * @brief calculate file sections start and length
+ * @param path path to file
+ * @param num_of_sections
+ * @param p_sections pointer to sections array
+ * @return ERR or OK
+ ******************************************************************************
+ */
 int file_2_sections(char *path, int num_of_sections, struct section *p_sections);
+
+/**
+ ******************************************************************************
+ * @brief waiting for threads to end and check exit codes
+ * @param p_h_threads thread handles array
+ * @param n_threads number of threads
+ * @return ERR or OK
+ ******************************************************************************
+ */
 int wait_for_n_threads(HANDLE *p_h_threads, int n_threads);
-int overwrite_file(char *path);
+
+/**
+ ******************************************************************************
+ * @brief create new file ovrwriting if existing
+ * @param path path to file to create
+ * @return OK or ERR
+ ******************************************************************************
+ */
+int create_output_file(char *path);
+
+/**
+ ******************************************************************************
+ * @brief create n threads
+ * @param thread_func function to br called
+ * @param p_h_threads thread handles array
+ * @param n_threads number of threads
+ * @param p_args pointer to thread arguments array
+ * @return ERR or OK
+ ******************************************************************************
+ */
 int create_n_threads(LPTHREAD_START_ROUTINE thread_func, HANDLE *p_h_threads,
                      int n_threads, struct thread_args *p_args);
+
+/**
+ ******************************************************************************
+ * @brief generate string of output path
+ * @param out_path pointer to hold the string
+ * @param in_path output path is based in that
+ * @param command to know file name
+ * @return ERR or OK
+ ******************************************************************************
+ */
+int out_path_file_generate(char **out_path, char *in_path, char command);
+
 
 #endif // __TASKS_H__

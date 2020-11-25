@@ -24,11 +24,6 @@
  ******************************************************************************
  */
 
-/**
- ******************************************************************************
- * @brief print usage
- ******************************************************************************
- */
 void print_usage()
 {
     printf("\nusage:\n\tceasar.exe [path] [key] [n] -[command]\n\n"
@@ -38,45 +33,20 @@ void print_usage()
            "\t[command] - e: encrypt, d: decrypt     \n\n");
 }
 
-/**
- ******************************************************************************
- * @brief print error message
- * @param error_code
+/*
  ******************************************************************************
  */
-void print_error()
-{
-    if (errno)
-        printf("%s\n", strerror(errno));
-    else if (GetLastError())
-        printf("WinAPI error: 0x%X\n", GetLastError());
-    else
-        printf("unknown error\n");
-}
 
-/**
- ******************************************************************************
- * @brief modulu
- * @param a
- * @param b
- * @return mod(a,b)
- ******************************************************************************
- */
 int mod(int a, int b)
 {
     int r = a % b;
     return r < 0 ? r + b : r;
 }
 
-/**
- ******************************************************************************
- * @brief check input validity
- * @param args pointer to arguments struct
- * @param argc from main
- * @param argv from main
- * @return ERR on failure, !ERR on success
+/*
  ******************************************************************************
  */
+
 int init(struct arguments *args, int argc, char **argv)
 {
     // number of arguments
@@ -89,7 +59,7 @@ int init(struct arguments *args, int argc, char **argv)
 
     // input file path check
     args->path = argv[1];
-    if(PathFileExistsA(args->path) == FALSE)
+    if(!PathFileExistsA(args->path))
     {
         printf("\n%s not found (WinAPI Error 0x%X)\n\n", args->path, GetLastError());
         return ERR;
@@ -98,7 +68,7 @@ int init(struct arguments *args, int argc, char **argv)
     // key
     args->key = strtol(argv[2], NULL, 10);
     if (errno == ERANGE)
-    { // FIXME: not enough
+    {
         printf("\ninvalid input. [key] must be integer.\n");
         print_usage();
         return ERR;
@@ -132,15 +102,11 @@ int init(struct arguments *args, int argc, char **argv)
     return (OK);
 }
 
-
-/**
- ******************************************************************************
- * @brief create new file ovrwriting if existing
- * @param path path to file to create
- * @return OK on success, ERR on error
+/*
  ******************************************************************************
  */
-int overwrite_file(char *path)
+
+int create_output_file(char *path)
 {
     HANDLE *h_outfile = NULL;
 
@@ -154,27 +120,24 @@ int overwrite_file(char *path)
 
     if (h_outfile == INVALID_HANDLE_VALUE)
     {
-        printf("WinAPI error: 0x%X\n", GetLastError());
+        printf("create_output_file: WinAPI Error 0x%X\n", GetLastError());
         return ERR;
     }
 
     if (!CloseHandle(h_outfile))
     {
-        printf("WinAPI error: 0x%X\n", GetLastError());
+        printf("create_output_file: WinAPI Error 0x%X\n", GetLastError());
         return ERR;
     }
 
     return OK;
 }
 
-/**
- ******************************************************************************
- * @brief count number of lines in file
- * @param path path to file
- * @return number of lines in file
+/*
  ******************************************************************************
  */
-int count_lines_in_file(char *path, int *lines)
+
+int count_lines_in_file(char *path, int *lines_cnt)
 {
     FILE *fp = NULL;
     char c;
@@ -182,13 +145,13 @@ int count_lines_in_file(char *path, int *lines)
     if (!(fp = fopen(path, "r")))
         return ERR;
 
-    *lines = 0;
+    *lines_cnt = 0;
 
     while(!feof(fp))
     {
         c = fgetc(fp);
         if (c == '\n' || c == EOF)
-            (*lines)++;
+            (*lines_cnt)++;
     }
 
     if (fclose(fp) != 0)
@@ -197,47 +160,37 @@ int count_lines_in_file(char *path, int *lines)
     return OK;
 }
 
-/**
- ******************************************************************************
- * @brief calculate file sections start and length
- * @param path path to file
- * @param num_of_sections
- * @param p_sections pointer to sections array
+/*
  ******************************************************************************
  */
+
 int file_2_sections(char *path, int num_of_sections, struct section *p_sections)
 {
     FILE   *fp = NULL;
     int    lines_in_file, lines_in_section, lines_remained;
-    int    line_cnt, char_cnt = 0, i = 0;
+    int    char_cnt = 0;
     char   c;
 
     // calc lines in sections
     if(!count_lines_in_file(path, &lines_in_file))
     {
-        printf("error: failed counting lines in %s.\n", path);
+        printf("file_2_sections: failed counting lines in %s.\n", path);
         return ERR;
     }
 
     lines_in_section = lines_in_file / num_of_sections;
     lines_remained   = lines_in_file % num_of_sections;
 
-    // sanity
-    if (num_of_sections > lines_in_file)
-    {
-        printf("error: can't split %d lines into %d sections\n", lines_in_file, num_of_sections);
-        return ERR;
-    }
-
     // open input file
     if(!(fp = fopen(path, "r")))
         return ERR;
 
     // calculate sections
-    while (!feof(fp))
+    for (int i = 0; i < num_of_sections; ++i)
     {
-        line_cnt = 0;
+        int line_cnt = 0;
         p_sections[i].start = char_cnt;
+
         while (line_cnt < lines_in_section)
         {
             c = fgetc(fp);
@@ -264,11 +217,16 @@ int file_2_sections(char *path, int num_of_sections, struct section *p_sections)
                     char_cnt++;
                     break;
                 }
+                else if (c == EOF)
+                { 
+                    line_cnt++;
+                    char_cnt--;
+                    break;
+                }
             }
             lines_remained--;
         }
         p_sections[i].length = char_cnt - p_sections[i].start;
-        i++;
     }
 
     // close input file
@@ -278,14 +236,10 @@ int file_2_sections(char *path, int num_of_sections, struct section *p_sections)
     return OK;
 }
 
-
-/**
- ******************************************************************************
- * @brief thread for decrypting file
- * @param args thread arguments
- * @return 
+/*
  ******************************************************************************
  */
+
 int create_n_threads(LPTHREAD_START_ROUTINE thread_func, HANDLE *p_h_threads,
                      int n_threads, struct thread_args *p_args)
 {
@@ -301,7 +255,7 @@ int create_n_threads(LPTHREAD_START_ROUTINE thread_func, HANDLE *p_h_threads,
                                       NULL);
         if (!p_h_threads[i])
         {
-            printf("WinAPI error: 0x%X\n", GetLastError());
+            printf("create_n_threads: WinAPI error 0x%X\n", GetLastError());
             rc = ERR;
             break;
         }
@@ -310,38 +264,43 @@ int create_n_threads(LPTHREAD_START_ROUTINE thread_func, HANDLE *p_h_threads,
     return rc;
 }
 
+/*
+ ******************************************************************************
+ */
 
 int wait_for_n_threads(HANDLE *p_h_threads, int n_threads)
 {
     DWORD wait_code;
     DWORD exit_code = OK;
-    bool all_wait_ok = true;
-    bool all_exit_ok = true;
-
     int rc = OK;
 
-    // wait for threads to end
+    // wait for all threads to end
     wait_code = WaitForMultipleObjects(n_threads, p_h_threads, TRUE, MAX_WAIT_END_TIME_MS);
+    
+    // if not all ended need to end manually
     if (wait_code != WAIT_OBJECT_0)
     {
         if (wait_code == WAIT_FAILED)
-            printf("WinAPI error: 0x%X\n", GetLastError());
+            printf("wait_for_n_threads: WinAPI Error 0x%X\n", GetLastError());
 
         for (int i = 0; i < n_threads; ++i)
         {
+            // all are supposed to have ended, so wait 0 ms
             wait_code = WaitForSingleObject(p_h_threads[i], 0);
             if(wait_code != WAIT_OBJECT_0)
             {
+                // since threads are single flow (i.e. no loops etc), if they did not get to
+                // end they will not get to an abort event, so terminate is the only option
                 if (!TerminateThread(p_h_threads[i], ERR))
                 {
-                    printf("WinAPI error: 0x%X\n", GetLastError());
+                    printf("wait_for_n_threads: WinAPI Error 0x%X\n", GetLastError());
                     return ERR;
                 }
                 wait_code = WaitForSingleObject(p_h_threads[i], 10);
                 if(wait_code != WAIT_OBJECT_0)
                 {
                     if (wait_code == WAIT_FAILED)
-                        printf("WinAPI error: 0x%X\n", GetLastError());
+                        printf("wait_for_n_threads: WinAPI Error 0x%X\n", GetLastError());
 
                     return ERR;
                 }
@@ -356,7 +315,7 @@ int wait_for_n_threads(HANDLE *p_h_threads, int n_threads)
     {
         if(!GetExitCodeThread(p_h_threads[i], &exit_code))
         {
-            printf("WinAPI error: 0x%X\n", GetLastError());
+            printf("wait_for_n_threads: WinAPI Error 0x%X\n", GetLastError());
             rc = ERR;
         }
         if (exit_code == ERR)
@@ -366,4 +325,36 @@ int wait_for_n_threads(HANDLE *p_h_threads, int n_threads)
     }
     
     return rc;
+}
+
+/*
+ ******************************************************************************
+ */
+
+int out_path_file_generate(char **out_path, char *in_path, char command)
+{
+    char *last_backslash;
+
+    // allocate extra space for simplicity
+    if (!(*out_path = calloc(strlen(in_path) + 15, sizeof(char))))
+        return ERR;
+
+    last_backslash = strrchr(in_path, '\\');
+    if (!last_backslash)
+    {
+        if (command == ENC)
+            sprintf(*out_path, "%s", ENCODE_OUT_PATH);
+        else
+            sprintf(*out_path, "%s", DECODE_OUT_PATH);
+    }
+    else
+    {
+        strncpy(*out_path, in_path, (last_backslash - in_path + 1));
+        if (command == ENC)
+            sprintf(*out_path + (last_backslash - in_path + 1), "%s", ENCODE_OUT_PATH);
+        else
+            sprintf(*out_path + (last_backslash - in_path + 1), "%s", DECODE_OUT_PATH);
+    }
+
+    return OK;
 }

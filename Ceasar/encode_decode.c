@@ -1,5 +1,5 @@
 /**
- * encode_decode.c
+ * @file encode_decode.c
  * Ceasar project
  * ISP_HW_2_2020
  * 
@@ -20,29 +20,10 @@
 
 /*
  ******************************************************************************
- * GLOBAL VARIABLES
- ******************************************************************************
- */
-char *out_file_path[] =
-{
-    [DEC] = "decrypted.txt",
-    [ENC] = "encrypted.txt",
-};
-
-/*
- ******************************************************************************
  * FUNCTION DEFENITIONS
  ******************************************************************************
  */
 
-/**
- ******************************************************************************
- * @brief encode / decode a char by given key
- * @param c 
- * @param key
- * @return decrypted symbol
- ******************************************************************************
- */
 char encode_decode_char(char c, int key)
 {
     if (isdigit(c))
@@ -55,14 +36,10 @@ char encode_decode_char(char c, int key)
         return c;
 }
 
-/**
- ******************************************************************************
- * @brief encrpyt / decrypt buffer
- * @param buffer pointer to buffer
- * @param buffer_len length of buffer
- * @param key
+/*
  ******************************************************************************
  */
+
 void encode_decode_buffer(char *buffer, int buffer_len, int key)
 {
     for (int i = 0; i < buffer_len; ++i)
@@ -71,13 +48,10 @@ void encode_decode_buffer(char *buffer, int buffer_len, int key)
     }
 }
 
-/**
- ******************************************************************************
- * @brief thread for decrypting file
- * @param args pointer to thread arguments struct
- * @return ERR or OK
+/*
  ******************************************************************************
  */
+
 DWORD WINAPI encode_decode_thread(struct thread_args *args)
 {
     HANDLE h_infile  = NULL;
@@ -87,11 +61,11 @@ DWORD WINAPI encode_decode_thread(struct thread_args *args)
     DWORD wait_code;
 
     // wait for start event from main thread
-    wait_code = WaitForSingleObject(*args->start_evt, MAX_WAIT_START_TIME_MS);
+    wait_code = WaitForSingleObject(*(args->start_evt), MAX_WAIT_START_TIME_MS);
     if (wait_code != WAIT_OBJECT_0)
     {
         if (wait_code == WAIT_FAILED)
-            printf("WinAPI error: 0x%X\n", GetLastError());
+            printf("encode_decode_thread: WinAPI Error 0x%X\n", GetLastError());
         
         ExitThread(ERR);
     }
@@ -155,9 +129,8 @@ DWORD WINAPI encode_decode_thread(struct thread_args *args)
 
     } while (0);
 
-    // pre-cleanup error prints
     if (rc == ERR)
-        printf("WinAPI error: 0x%X\n", GetLastError());
+        printf("encode_decode_thread: WinAPI Error 0x%X\n", GetLastError());
 
     // free thread resources
     if (h_infile)
@@ -169,44 +142,35 @@ DWORD WINAPI encode_decode_thread(struct thread_args *args)
     if (buffer)
         free(buffer);
 
-    // post cleanup error prints
-    if (rc == ERR)
-        printf("WinAPI error: 0x%X\n", GetLastError());
-
     ExitThread((DWORD)rc);
 }
 
-/**
- ******************************************************************************
- * @brief decrypt an encrypted file
- * @param in_path path to input file
- * @param command encode or decode
- * @param key for decryption
- * @param n_threads how many threads will be used
- * @return return_code
+/*
  ******************************************************************************
  */
+
 int encode_decode_file(char *in_path, char command, int key, int n_threads)
 {
     HANDLE *p_h_threads        = NULL;
     HANDLE h_start_evt         = NULL;
     struct section *p_sections = NULL;
     struct thread_args *p_args = NULL;
-    char *out_path = out_file_path[command];
+    char *out_path             = NULL;
     int rc = ERR;
 
-    // allocate and init mem for thread hanldles
+    // allocate and init mem for thread handles
     if (!(p_h_threads = calloc(n_threads, sizeof(HANDLE))))
         return ERR;
     for (int i = 0; i < n_threads; p_h_threads[i++] = NULL);
 
-    // do/wile(0) for easier error cleanup
+    // do/wile(0) for easier cleanup
     do {
-        // allocate mem for sections
-        if (!(p_sections = calloc(n_threads, sizeof(*p_sections))))
+        if (!out_path_file_generate(&out_path, in_path, command))
             break;
 
-        if (!(p_args = calloc(n_threads, sizeof(*p_args))))
+        // allocate mem for sections and thread args
+        if (!(p_sections = calloc(n_threads, sizeof(*p_sections))) ||
+            !(p_args     = calloc(n_threads, sizeof(*p_args))))
             break;
 
         // split file into n sctions
@@ -214,7 +178,7 @@ int encode_decode_file(char *in_path, char command, int key, int n_threads)
             break;
 
         // create output file
-        if (!overwrite_file(out_path))
+        if (!create_output_file(out_path))
             break;
 
         // create event that will start threads
@@ -239,17 +203,13 @@ int encode_decode_file(char *in_path, char command, int key, int n_threads)
         if (!SetEvent(h_start_evt))
             break;
 
-        // wait for threads to exit
+        // wait for threads to end
         if (!wait_for_n_threads(p_h_threads, n_threads))
             break;
 
         rc = OK;
 
     } while (0);
-
-    // pre-clenup error print
-    if (rc == ERR)
-        printf("WinAPI error: 0x%X\n", GetLastError());
 
     // cleanup
     for (int i = 0; i < n_threads; ++i)
@@ -265,10 +225,8 @@ int encode_decode_file(char *in_path, char command, int key, int n_threads)
         free(p_sections);
     if (p_args)
         free(p_args);
-
-    // post-cleanup error prints
-    if (rc == ERR)
-        printf("WinAPI error: 0x%X\n", GetLastError());
+    if (out_path)
+        free(out_path);
 
     return rc;
 }

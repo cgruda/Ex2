@@ -62,9 +62,46 @@ struct thread_args
  * DECLARATIONS
  ******************************************************************************
  */
-char         encode_decode_char  (char c, int key);
-void         encode_decode_buffer(char *buffer, int buffer_len, int key);
-int          encode_decode_file  (char *in_path, char command, int key, int n_threads);
+
+/**
+ ******************************************************************************
+ * @brief encode / decode a char by given key
+ * @param c 
+ * @param key
+ * @return decrypted symbol
+ ******************************************************************************
+ */
+char encode_decode_char  (char c, int key);
+
+/**
+ ******************************************************************************
+ * @brief encrpyt / decrypt buffer
+ * @param buffer pointer to buffer
+ * @param buffer_len length of buffer
+ * @param key
+ ******************************************************************************
+ */
+void encode_decode_buffer(char *buffer, int buffer_len, int key);
+
+/**
+ ******************************************************************************
+ * @brief decode or encode file
+ * @param in_path path to input file
+ * @param command encode or decode
+ * @param key
+ * @param n_threads how many threads will be used
+ * @return OK or ERR
+ ******************************************************************************
+ */
+int encode_decode_file (char *in_path, char command, int key, int n_threads);
+
+/**
+ ******************************************************************************
+ * @brief thread for decrypting file
+ * @param args pointer to thread arguments struct
+ * @return ERR or OK
+ ******************************************************************************
+ */
 DWORD WINAPI encode_decode_thread(struct thread_args *args);
 
 #endif // __ENCODE_DECODE_H__
